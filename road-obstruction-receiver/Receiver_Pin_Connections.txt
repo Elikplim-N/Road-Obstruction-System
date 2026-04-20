@@ -1,0 +1,32 @@
+=========================================
+ROAD OBSTRUCTION RECEIVER (ESP8266) PIN CONNECTIONS
+=========================================
+
+1. SX1278 (Ra-01 / Ra-02) LoRa Module
+-----------------------------------------
+Wemos Pin     LoRa Pin    Notes
+-----------------------------------------
+3V3           VCC         Use 3.3V, NOT 5V!
+G             GND         Ground
+D5 (GPIO14)   SCK         SPI Clock
+D6 (GPIO12)   MISO        SPI MISO
+D7 (GPIO13)   MOSI        SPI MOSI
+D8 (GPIO15)   NSS (CS)    Chip Select
+D0 (GPIO16)   RST         Reset
+D3 (GPIO0)    DIO0        Interrupt (essential)
+
+2. I2C LCD (16x2)
+-----------------------------------------
+Wemos Pin     Component   Notes
+-----------------------------------------
+D1 (GPIO5)    SCL         I2C Clock
+D2 (GPIO4)    SDA         I2C Data
+3V3 or 5V     VCC         Depends on your LCD module (most take 5V)
+G             GND         Ground
+
+3. Outputs (Buzzer)
+-----------------------------------------
+Wemos Pin     Component   Notes
+-----------------------------------------
+D4 (GPIO2)    Buzzer +    Active buzzer positive pin
+G             Buzzer -    Buzzer ground
