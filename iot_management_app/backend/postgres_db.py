@@ -102,12 +102,14 @@ class PostgresDatabase:
             self.last_error = str(e)
             return False, str(e)
 
-    def log_incident(self, device_id, event_type, severity, duration, lane, proximity, snapshot_name, photo_bytes=None, latency_ms=4.2):
+    def log_incident(self, device_id, event_type, severity, duration, lane, proximity, snapshot_name, photo_url=None, photo_bytes=None, latency_ms=4.2):
         if not self.is_connected:
             return False
 
+        # Images are stored on server disk. We store the server photo URL in the database.
+        url_val = photo_url or (f"/api/photos/{snapshot_name}" if snapshot_name else "")
         b64_photo = ""
-        if photo_bytes is not None:
+        if photo_bytes is not None and not photo_url:
             b64_photo = "data:image/jpeg;base64," + base64.b64encode(photo_bytes).decode('utf-8')
 
         try:
@@ -116,9 +118,9 @@ class PostgresDatabase:
                 return False
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO incident_logs (device_id, event_type, severity, stationary_duration, lane_corridor, proximity_zone, snapshot_filename, photo_base64, broadcast_latency_ms)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (device_id, event_type, severity, float(duration or 0.0), lane, proximity, snapshot_name, b64_photo, float(latency_ms)))
+                    INSERT INTO incident_logs (device_id, event_type, severity, stationary_duration, lane_corridor, proximity_zone, snapshot_filename, photo_url, photo_base64, broadcast_latency_ms)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (device_id, event_type, severity, float(duration or 0.0), lane, proximity, snapshot_name, url_val, b64_photo, float(latency_ms)))
                 
                 # Increment device total alerts
                 cur.execute("""
@@ -171,7 +173,8 @@ class PostgresDatabase:
                     SELECT id, to_char(timestamp, 'YYYY-MM-DD HH24:MI:SS') as timestamp,
                            device_id, event_type, severity, stationary_duration as duration,
                            lane_corridor as lane, proximity_zone as proximity, snapshot_filename,
-                           photo_base64, broadcast_latency_ms
+                           COALESCE(photo_url, '/api/photos/' || snapshot_filename) as photo_url,
+                           broadcast_latency_ms
                     FROM incident_logs
                     ORDER BY id DESC LIMIT %s
                 """, (limit,))
@@ -180,4 +183,5 @@ class PostgresDatabase:
         except Exception as e:
             print(f"[PostgreSQL Query Error] {e}")
             return []
+
 

@@ -22,6 +22,8 @@ APP_DIR = BACKEND_DIR.parent
 PROJECT_DIR = APP_DIR.parent
 DESKTOP_DIR = PROJECT_DIR / "desktop_app"
 FRONTEND_DIR = APP_DIR / "frontend"
+SERVER_PHOTOS_DIR = APP_DIR / "storage" / "photos"
+SERVER_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 sys.path.append(str(DESKTOP_DIR))
 
 import config
@@ -198,13 +200,15 @@ def high_speed_detection_worker():
             DEVICES["ESP32-RX-01"]["alerts_count"] += 1
             DEVICES["VMS-SIGN-01"]["current_message"] = f"! CAUTION: {alert['type']} IN LANE 1 - REDUCE SPEED !"
 
-            # 2. Compress photographic evidence to JPEG bytes
-            ret_enc, jpeg_buf = cv2.imencode('.jpg', annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            jpeg_bytes = jpeg_buf.tobytes() if ret_enc else None
+            # 2. Save photographic evidence directly on server filesystem
+            snap_name = f"incident_{int(time.time())}_{alert['type'].replace(' ', '_')}.jpg"
+            server_photo_path = SERVER_PHOTOS_DIR / snap_name
+            cv2.imwrite(str(server_photo_path), annotated_frame)
+            photo_url = f"/api/photos/{snap_name}"
 
-            # 3. Store in SQLite & PostgreSQL on Dokploy
-            snap_name = incident_db.log_hazard(alert, frame=annotated_frame, node_id="ESP32-CAM-01", lane="LANE_1")
-            if postgres_db.is_connected and jpeg_bytes:
+            # 3. Store in SQLite & PostgreSQL on Dokploy with server photo URL
+            incident_db.log_hazard(alert, frame=annotated_frame, node_id="ESP32-CAM-01", lane="LANE_1")
+            if postgres_db.is_connected:
                 postgres_db.log_incident(
                     device_id="ESP32-CAM-01",
                     event_type=alert['type'],
@@ -213,7 +217,7 @@ def high_speed_detection_worker():
                     lane="LANE_1",
                     proximity=alert['dist'],
                     snapshot_name=snap_name,
-                    photo_bytes=jpeg_bytes,
+                    photo_url=photo_url,
                     latency_ms=round(proc_latency_ms, 2)
                 )
         else:
@@ -271,7 +275,10 @@ class FastIoTHandler(SimpleHTTPRequestHandler):
             self.serve_file(FRONTEND_DIR / path.lstrip("/"), "application/javascript")
         elif path.startswith("/api/photos/"):
             fname = os.path.basename(path)
-            self.serve_file(incident_db.snapshots_dir / fname, "image/jpeg")
+            photo_file = SERVER_PHOTOS_DIR / fname
+            if not photo_file.exists():
+                photo_file = incident_db.snapshots_dir / fname
+            self.serve_file(photo_file, "image/jpeg")
 
         # Live MJPEG Stream (Supports ?view=live | ?view=mask | ?view=background)
         elif path == "/api/camera/stream":
@@ -376,7 +383,7 @@ class FastIoTHandler(SimpleHTTPRequestHandler):
                             "duration": f"{r['duration']}s",
                             "lane": r["lane"],
                             "has_photo": True,
-                            "photo_url": r["photo_base64"] if r["photo_base64"] else f"/api/photos/{r['snapshot_filename']}"
+                            "photo_url": r.get("photo_url") or f"/api/photos/{r['snapshot_filename']}"
                         })
                     self.send_json(formatted)
                     return
@@ -500,6 +507,8 @@ class FastIoTHandler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(p.stat().st_size))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "public, max-age=86400")
             self.end_headers()
             with open(p, "rb") as f:
                 self.wfile.write(f.read())
@@ -507,11 +516,13 @@ class FastIoTHandler(SimpleHTTPRequestHandler):
             self.send_error(404, "File Not Found")
 
     def send_json(self, data):
+        payload = json.dumps(data).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode("utf-8"))
+        self.wfile.write(payload)
 
     def log_message(self, format, *args):
         return

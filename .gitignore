@@ -18,3 +18,5 @@ __pycache__/
 server.log
 desktop_app/sample_data/road_incidents.db
 desktop_app/sample_data/snapshots/
+iot_management_app/storage/photos/*.jpg
+!iot_management_app/storage/photos/.gitkeep
