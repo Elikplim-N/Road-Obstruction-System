@@ -1,13 +1,43 @@
 /**
  * Highway Road Safety System - Clean, Simple Frontend Controller
- * Effortless, intuitive, zero-clutter operation.
+ * With Vercel Deployment Support & Configurable Backend Endpoint
  */
 
+let BACKEND_URL = localStorage.getItem('IOT_BACKEND_URL') || '';
 let isMaskView = false;
 let currentSource = '1';
 
+function apiUrl(path) {
+    if (!BACKEND_URL) return path;
+    const base = BACKEND_URL.replace(/\/+$/, '');
+    return base + (path.startsWith('/') ? path : '/' + path);
+}
+
+function updateBackendLabel() {
+    const label = document.getElementById('backendLabel');
+    if (!label) return;
+    if (BACKEND_URL) {
+        try {
+            const u = new URL(BACKEND_URL);
+            label.textContent = `Backend: ${u.hostname}`;
+        } catch {
+            label.textContent = 'Backend: Remote';
+        }
+    } else {
+        label.textContent = 'Backend: Local';
+    }
+}
+
 // ================= STARTUP =================
 window.addEventListener('DOMContentLoaded', () => {
+    updateBackendLabel();
+    
+    // Auto-populate live video feed
+    const img = document.getElementById('liveVideoFeed');
+    if (img) {
+        img.src = apiUrl('/api/camera/stream?view=live');
+    }
+
     fetchSystemStatus();
     fetchLogs();
     fetchCameraStatus();
@@ -19,6 +49,39 @@ window.addEventListener('DOMContentLoaded', () => {
     setInterval(fetchDbStatus, 6000);
 });
 
+// ================= BACKEND URL MODAL (VERCEL HOSTING) =================
+function openBackendModal() {
+    const input = document.getElementById('backendUrlInput');
+    if (input) input.value = BACKEND_URL;
+    document.getElementById('backendModal').style.display = 'flex';
+}
+
+function closeBackendModal() {
+    document.getElementById('backendModal').style.display = 'none';
+}
+
+function saveBackendUrl() {
+    const input = document.getElementById('backendUrlInput');
+    let val = input ? input.value.trim() : '';
+    if (val && !val.startsWith('http://') && !val.startsWith('https://')) {
+        val = 'http://' + val;
+    }
+    BACKEND_URL = val;
+    localStorage.setItem('IOT_BACKEND_URL', val);
+    updateBackendLabel();
+    closeBackendModal();
+
+    // Reload stream and data from new backend
+    const img = document.getElementById('liveVideoFeed');
+    if (img) {
+        img.src = apiUrl(`/api/camera/stream?view=${isMaskView ? 'mask' : 'live'}&_=${Date.now()}`);
+    }
+    fetchSystemStatus();
+    fetchLogs();
+    fetchDbStatus();
+    fetchCameraStatus();
+}
+
 // ================= LIVE CAMERA CONTROLS =================
 
 // 1. One-Click Road Background Calibration
@@ -27,7 +90,7 @@ async function calibrateRoadBackground() {
     if (badge) badge.textContent = '⏳ Calibrating...';
 
     try {
-        const res = await fetch('/api/camera/calibrate', { method: 'POST' });
+        const res = await fetch(apiUrl('/api/camera/calibrate'), { method: 'POST' });
         const data = await res.json();
         if (data.success) {
             if (badge) {
@@ -40,7 +103,7 @@ async function calibrateRoadBackground() {
             alert('Calibration notice: ' + data.message);
         }
     } catch (e) {
-        alert('Could not calibrate background: server unreachable');
+        alert('Could not calibrate background: server unreachable at ' + (BACKEND_URL || 'localhost'));
     }
 }
 
@@ -51,10 +114,10 @@ function toggleEdgeMask() {
     isMaskView = !isMaskView;
 
     if (isMaskView) {
-        img.src = `/api/camera/stream?view=mask&_=${Date.now()}`;
+        img.src = apiUrl(`/api/camera/stream?view=mask&_=${Date.now()}`);
         btn.textContent = '🎥 View Normal Camera';
     } else {
-        img.src = `/api/camera/stream?view=live&_=${Date.now()}`;
+        img.src = apiUrl(`/api/camera/stream?view=live&_=${Date.now()}`);
         btn.textContent = '⚡ View Edge Mask';
     }
 }
@@ -62,7 +125,7 @@ function toggleEdgeMask() {
 // 3. Change Camera Source (Local Cam, ESP32-CAM, Demo Video)
 async function changeCameraSource(newSource) {
     try {
-        const res = await fetch('/api/camera/source', {
+        const res = await fetch(apiUrl('/api/camera/source'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ source: newSource })
@@ -74,7 +137,7 @@ async function changeCameraSource(newSource) {
         setTimeout(() => {
             const img = document.getElementById('liveVideoFeed');
             if (img) {
-                img.src = `/api/camera/stream?view=${isMaskView ? 'mask' : 'live'}&_=${Date.now()}`;
+                img.src = apiUrl(`/api/camera/stream?view=${isMaskView ? 'mask' : 'live'}&_=${Date.now()}`);
             }
         }, 500);
     } catch (e) {
@@ -84,7 +147,7 @@ async function changeCameraSource(newSource) {
 
 async function fetchCameraStatus() {
     try {
-        const res = await fetch('/api/camera/calibration');
+        const res = await fetch(apiUrl('/api/camera/calibration'));
         const data = await res.json();
         const badge = document.getElementById('calibBadge');
         if (badge) {
@@ -100,7 +163,7 @@ async function fetchCameraStatus() {
 // ================= SYSTEM STATUS & HAZARD MONITORING =================
 async function fetchSystemStatus() {
     try {
-        const res = await fetch('/api/stats');
+        const res = await fetch(apiUrl('/api/stats'));
         const data = await res.json();
 
         const pill = document.getElementById('systemStatusPill');
@@ -153,7 +216,7 @@ async function fetchSystemStatus() {
 // ================= TEST IN-CABIN DRIVER ALARM =================
 async function testDriverAlarm() {
     try {
-        const res = await fetch('/api/devices/ESP32-RX-01/test-alarm', { method: 'POST' });
+        const res = await fetch(apiUrl('/api/devices/ESP32-RX-01/test-alarm'), { method: 'POST' });
         const data = await res.json();
         alert(`🔊 In-Cabin Warning Test:\n${data.message}`);
     } catch (e) {
@@ -164,7 +227,7 @@ async function testDriverAlarm() {
 // ================= RECENT INCIDENT LOGS & EVIDENCE =================
 async function fetchLogs() {
     try {
-        const res = await fetch('/api/logs');
+        const res = await fetch(apiUrl('/api/logs'));
         const logs = await res.json();
         renderLogsTable(logs);
     } catch (e) {}
@@ -192,7 +255,7 @@ function renderLogsTable(logs) {
             <td>${l.duration}</td>
             <td>
                 ${l.has_photo ? `
-                    <img src="${l.photo_url}" class="photo-thumb" alt="Evidence" onclick="openPhotoModal('${l.photo_url}', '${l.timestamp}', '${l.event}')" title="Click to enlarge">
+                    <img src="${l.photo_url.startsWith('data:') ? l.photo_url : apiUrl(l.photo_url)}" class="photo-thumb" alt="Evidence" onclick="openPhotoModal('${l.photo_url.startsWith('data:') ? l.photo_url : apiUrl(l.photo_url)}', '${l.timestamp}', '${l.event}')" title="Click to enlarge">
                 ` : `<span style="color: var(--text-muted); font-size: 0.75rem;">No photo</span>`}
             </td>
         </tr>
@@ -225,14 +288,14 @@ function closeDbModal() {
 
 async function fetchDbStatus() {
     try {
-        const res = await fetch('/api/database/status');
+        const res = await fetch(apiUrl('/api/database/status'));
         const db = await res.json();
         const label = document.getElementById('dbStatusLabel');
         const input = document.getElementById('dbUriInput');
         const statusNote = document.getElementById('dbModalStatus');
 
         if (db.connected) {
-            if (label) label.textContent = 'Database: PostgreSQL (Dokploy)';
+            if (label) label.textContent = 'Database: Dokploy';
             if (statusNote) {
                 statusNote.style.color = '#047857';
                 statusNote.textContent = '● Connected to Dokploy PostgreSQL';
@@ -261,7 +324,7 @@ async function connectDokployDatabase() {
     if (statusNote) statusNote.textContent = 'Connecting to Dokploy...';
 
     try {
-        const res = await fetch('/api/database/connect', {
+        const res = await fetch(apiUrl('/api/database/connect'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ database_url: uri })

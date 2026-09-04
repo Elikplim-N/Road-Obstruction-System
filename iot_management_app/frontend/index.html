@@ -25,9 +25,14 @@
                 <span id="systemStatusText">LANE CLEAR</span>
             </div>
 
+            <!-- Backend Host Button (for Vercel deployment) -->
+            <button id="backendBtn" class="btn-subtle" onclick="openBackendModal()" title="Configure IoT Backend API URL">
+                ⚡ <span id="backendLabel">Backend: Local</span>
+            </button>
+
             <!-- Dokploy DB Button -->
             <button id="dbStatusBtn" class="btn-subtle" onclick="openDbModal()">
-                🐘 <span id="dbStatusLabel">Database: SQLite</span>
+                🐘 <span id="dbStatusLabel">Database: Dokploy</span>
             </button>
         </div>
     </nav>
@@ -192,6 +197,32 @@
             <div class="modal-footer">
                 <button class="btn-subtle" onclick="closeDbModal()">Cancel</button>
                 <button class="btn-primary" onclick="connectDokployDatabase()">Connect & Sync</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= BACKEND URL MODAL (FOR VERCEL HOSTING) ================= -->
+    <div id="backendModal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 520px;">
+            <div class="modal-header">
+                <span class="modal-title">⚡ IoT Backend API & Stream Endpoint</span>
+                <button class="btn-close" onclick="closeBackendModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 14px;">
+                    When your frontend is hosted on Vercel, specify the address of your IoT backend server (e.g. your Dokploy host or edge gateway) to receive live streams and alerts.
+                </p>
+                <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 6px;">
+                    Backend Server URL
+                </label>
+                <input type="text" id="backendUrlInput" class="clean-input" placeholder="http://178.105.184.157:9000 or http://localhost:9000">
+                <span style="font-size: 0.74rem; color: var(--text-muted); margin-top: 6px; display: block;">
+                    Leave empty to default to current server.
+                </span>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-subtle" onclick="closeBackendModal()">Cancel</button>
+                <button class="btn-primary" onclick="saveBackendUrl()">Save & Connect</button>
             </div>
         </div>
     </div>
