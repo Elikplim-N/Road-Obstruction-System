@@ -118,6 +118,7 @@ state_lock = threading.Lock()
 frame_condition = threading.Condition()
 is_running = True
 active_hazard = None
+latest_captured_incident = None
 
 def open_capture_device(src_str):
     """
@@ -145,7 +146,7 @@ def high_speed_detection_worker():
     Dispatches instantaneous alert packets over LoRa and Wi-Fi upon hazard detection.
     """
     global latest_frame_jpeg, latest_mask_jpeg, latest_bg_jpeg, active_hazard, is_running
-    global active_camera_source, pending_camera_source
+    global active_camera_source, pending_camera_source, latest_captured_incident
 
     cap = open_capture_device(active_camera_source)
     w, h = 800, 600
@@ -205,6 +206,17 @@ def high_speed_detection_worker():
             server_photo_path = SERVER_PHOTOS_DIR / snap_name
             cv2.imwrite(str(server_photo_path), annotated_frame)
             photo_url = f"/api/photos/{snap_name}"
+            latest_captured_incident = {
+                "photo_url": photo_url,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "event_type": alert['type'],
+                "severity": alert['status'],
+                "lane": "LANE_1",
+                "proximity": alert['dist'],
+                "duration": f"{alert['duration']}s",
+                "diff_pct": alert.get("diff_pct", 0.0),
+                "constant_duration": alert.get("constant_duration", 0.0)
+            }
 
             # 3. Store in SQLite & PostgreSQL on Dokploy with server photo URL
             incident_db.log_hazard(alert, frame=annotated_frame, node_id="ESP32-CAM-01", lane="LANE_1")
@@ -404,6 +416,12 @@ class FastIoTHandler(SimpleHTTPRequestHandler):
                 })
             self.send_json(logs)
 
+        elif path == "/api/differencing/status":
+            data = detector.get_differencing_telemetry()
+            data["latest_captured_incident"] = latest_captured_incident
+            data["active_hazard"] = active_hazard
+            self.send_json(data)
+
         elif path == "/api/stats":
             stats = incident_db.get_summary_statistics()
             data = {
@@ -416,6 +434,8 @@ class FastIoTHandler(SimpleHTTPRequestHandler):
                 "lora_pdr": "100.0%",
                 "broadcast_status": "Instantaneous (<1ms)",
                 "active_hazard": active_hazard,
+                "differencing": detector.get_differencing_telemetry(),
+                "latest_captured_incident": latest_captured_incident,
                 "camera_calibrated": detector.bg_calibrated,
                 "database_engine": "PostgreSQL (Dokploy)" if postgres_db.is_connected else "SQLite (Local Fallback)"
             }

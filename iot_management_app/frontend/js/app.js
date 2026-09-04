@@ -32,20 +32,19 @@ function updateBackendLabel() {
 window.addEventListener('DOMContentLoaded', () => {
     updateBackendLabel();
     
-    // Auto-populate live video feed
-    const img = document.getElementById('liveVideoFeed');
-    if (img) {
-        img.src = apiUrl('/api/camera/stream?view=live');
-    }
+    // Load initial on-demand snapshot (No continuous stream running)
+    grabSnapshotNow();
 
+    fetchDifferencingStatus();
     fetchSystemStatus();
     fetchLogs();
     fetchCameraStatus();
     fetchDbStatus();
 
-    // Fast, lightweight polling
-    setInterval(fetchSystemStatus, 1500);
-    setInterval(fetchLogs, 3000);
+    // Fast, event-driven polling (Low bandwidth, JSON only)
+    setInterval(fetchDifferencingStatus, 1000);
+    setInterval(fetchSystemStatus, 2000);
+    setInterval(fetchLogs, 3500);
     setInterval(fetchDbStatus, 6000);
 });
 
@@ -71,20 +70,100 @@ function saveBackendUrl() {
     updateBackendLabel();
     closeBackendModal();
 
-    // Reload stream and data from new backend
-    const img = document.getElementById('liveVideoFeed');
-    if (img) {
-        img.src = apiUrl(`/api/camera/stream?view=${isMaskView ? 'mask' : 'live'}&_=${Date.now()}`);
-    }
+    // Refresh telemetry and captured snapshot
+    grabSnapshotNow();
+    fetchDifferencingStatus();
     fetchSystemStatus();
     fetchLogs();
     fetchDbStatus();
     fetchCameraStatus();
 }
 
-// ================= LIVE CAMERA CONTROLS =================
+// ================= FRAME DIFFERENCING & CAPTURED EVIDENCE =================
 
-// 1. One-Click Road Background Calibration
+// 1. Fetch Real-Time Differencing Telemetry (Variance & Constant Change Timer)
+async function fetchDifferencingStatus() {
+    try {
+        const res = await fetch(apiUrl('/api/differencing/status'));
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Update Differencing Variance Meter
+        const diffText = document.getElementById('diffPctText');
+        const diffBar = document.getElementById('diffBarFill');
+        if (diffText) diffText.textContent = `${data.diff_pct.toFixed(1)}%`;
+        if (diffBar) {
+            diffBar.style.width = `${Math.min(100, data.diff_pct * 3.5)}%`;
+        }
+
+        // Update Constant Change Persistence Timer
+        const constText = document.getElementById('constDurText');
+        const constBar = document.getElementById('constBarFill');
+        if (constText) constText.textContent = `${data.constant_duration.toFixed(1)}s / ${data.threshold_seconds.toFixed(1)}s`;
+        if (constBar) {
+            const pct = Math.min(100, (data.constant_duration / data.threshold_seconds) * 100);
+            constBar.style.width = `${pct}%`;
+            if (data.constant_triggered) {
+                constBar.className = 'diff-bar-fill trip';
+            } else if (data.diff_pct > 1.5) {
+                constBar.className = 'diff-bar-fill caution';
+            } else {
+                constBar.className = 'diff-bar-fill';
+            }
+        }
+
+        // If constant change triggered an obstruction event, update captured evidence photo
+        if (data.latest_captured_incident && data.latest_captured_incident.photo_url) {
+            const photoUrl = data.latest_captured_incident.photo_url;
+            if (photoUrl !== lastCapturedPhotoUrl && !liveStreamActive) {
+                lastCapturedPhotoUrl = photoUrl;
+                const img = document.getElementById('incidentPhotoDisplay');
+                if (img) {
+                    img.src = apiUrl(photoUrl);
+                }
+            }
+        }
+
+        // Differencing Dot Indicator
+        const dot = document.getElementById('differencingDot');
+        if (dot) {
+            dot.style.background = data.constant_triggered ? '#ef4444' : (data.diff_pct > 1.5 ? '#f59e0b' : '#10b981');
+        }
+    } catch (e) {}
+}
+
+// 2. Grab Single On-Demand Snapshot (Zero Streaming Overhead)
+function grabSnapshotNow() {
+    const img = document.getElementById('incidentPhotoDisplay');
+    if (img && !liveStreamActive) {
+        img.src = apiUrl(`/api/camera/snapshot?view=${isMaskView ? 'mask' : 'live'}&_=${Date.now()}`);
+    }
+}
+
+// 3. Optional Live Stream Toggle (User must explicitly activate)
+function toggleLiveStream() {
+    const img = document.getElementById('incidentPhotoDisplay');
+    const btn = document.getElementById('streamToggleBtn');
+    liveStreamActive = !liveStreamActive;
+
+    if (liveStreamActive) {
+        img.src = apiUrl(`/api/camera/stream?view=${isMaskView ? 'mask' : 'live'}&_=${Date.now()}`);
+        if (btn) {
+            btn.textContent = '⏹️ Stop Stream';
+            btn.style.background = '#fee2e2';
+            btn.style.color = '#b91c1c';
+        }
+    } else {
+        grabSnapshotNow();
+        if (btn) {
+            btn.textContent = '▶️ Live Stream';
+            btn.style.background = 'var(--bg-white)';
+            btn.style.color = 'var(--text-primary)';
+        }
+    }
+}
+
+// 4. One-Click Road Baseline Calibration
 async function calibrateRoadBackground() {
     const badge = document.getElementById('calibBadge');
     if (badge) badge.textContent = '⏳ Calibrating...';
@@ -94,35 +173,40 @@ async function calibrateRoadBackground() {
         const data = await res.json();
         if (data.success) {
             if (badge) {
-                badge.textContent = '● Background Calibrated';
+                badge.textContent = '● Baseline Locked';
                 badge.style.background = '#ecfdf5';
                 badge.style.color = '#047857';
             }
-            alert('🎯 Clean road background calibrated successfully!\nThe edge detector is now locked to this baseline.');
+            grabSnapshotNow();
+            alert('🎯 Clean road baseline calibrated successfully!\nFrame differencing will now compute deltas against this reference.');
         } else {
             alert('Calibration notice: ' + data.message);
         }
     } catch (e) {
-        alert('Could not calibrate background: server unreachable at ' + (BACKEND_URL || 'localhost'));
+        alert('Could not calibrate: server unreachable at ' + (BACKEND_URL || 'localhost'));
     }
 }
 
-// 2. Toggle Edge Differential Mask
+// 5. Toggle Edge Differential Mask View
 function toggleEdgeMask() {
-    const img = document.getElementById('liveVideoFeed');
     const btn = document.getElementById('maskToggleBtn');
     isMaskView = !isMaskView;
 
     if (isMaskView) {
-        img.src = apiUrl(`/api/camera/stream?view=mask&_=${Date.now()}`);
-        btn.textContent = '🎥 View Normal Camera';
+        if (btn) btn.textContent = '🎥 View Normal Photo';
     } else {
-        img.src = apiUrl(`/api/camera/stream?view=live&_=${Date.now()}`);
-        btn.textContent = '⚡ View Edge Mask';
+        if (btn) btn.textContent = '⚡ View Edge Mask';
+    }
+
+    if (liveStreamActive) {
+        const img = document.getElementById('incidentPhotoDisplay');
+        if (img) img.src = apiUrl(`/api/camera/stream?view=${isMaskView ? 'mask' : 'live'}&_=${Date.now()}`);
+    } else {
+        grabSnapshotNow();
     }
 }
 
-// 3. Change Camera Source (Local Cam, ESP32-CAM, Demo Video)
+// 6. Change Camera Source (Local Cam, ESP32-CAM, Demo Video)
 async function changeCameraSource(newSource) {
     try {
         const res = await fetch(apiUrl('/api/camera/source'), {
@@ -130,16 +214,8 @@ async function changeCameraSource(newSource) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ source: newSource })
         });
-        const data = await res.json();
         currentSource = newSource;
-        
-        // Reload video feed after source switch
-        setTimeout(() => {
-            const img = document.getElementById('liveVideoFeed');
-            if (img) {
-                img.src = apiUrl(`/api/camera/stream?view=${isMaskView ? 'mask' : 'live'}&_=${Date.now()}`);
-            }
-        }, 500);
+        setTimeout(grabSnapshotNow, 500);
     } catch (e) {
         alert('Failed to switch camera source');
     }

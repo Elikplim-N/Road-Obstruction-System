@@ -43,36 +43,68 @@
         <!-- Top Grid: Live Camera + Road Status & Devices -->
         <div class="dashboard-grid">
 
-            <!-- LEFT: Live Camera Stream & Simple Background Calibration -->
+            <!-- LEFT: Frame Differencing & Event-Driven Evidence (No constant stream needed) -->
             <div class="card camera-card">
                 <div class="card-header">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <span class="pulse-dot-green"></span>
-                        <h2 class="card-title">Live Highway Camera (Street Pole #01)</h2>
+                        <span class="pulse-dot-green" id="differencingDot"></span>
+                        <h2 class="card-title">Frame Differencing & Captured Evidence (Street Pole #01)</h2>
                     </div>
-                    <span id="calibBadge" class="calib-badge">● Background Calibrated</span>
+                    <span id="calibBadge" class="calib-badge">● Differencing Active</span>
                 </div>
 
-                <!-- Video Viewport -->
-                <div class="video-frame-container">
-                    <img id="liveVideoFeed" src="/api/camera/stream?view=live" alt="Highway Camera Feed">
+                <!-- Event Snapshot Viewport -->
+                <div class="video-frame-container" id="photoFrameContainer">
+                    <img id="incidentPhotoDisplay" src="/api/camera/snapshot" alt="Captured Obstruction Evidence">
                     
-                    <!-- Subtle Alert Banner overlay on video -->
+                    <!-- Alert Banner overlay on evidence viewport -->
                     <div id="videoOverlayBanner" class="video-overlay-banner banner-clear">
-                        ● ROADWAY CLEAR
+                        ● ROADWAY CLEAR — DIFFERENCING ACTIVE
                     </div>
                 </div>
 
-                <!-- Simple Camera Controls (Just 2 clean actions) -->
+                <!-- Real-Time Differencing & Constant Change Progress Bars -->
+                <div class="diff-meter-container">
+                    <div class="diff-meter-item">
+                        <div class="diff-meter-header">
+                            <span>Corridor Variance (Differencing)</span>
+                            <span id="diffPctText" style="font-family: var(--font-mono); font-weight: 700;">0.0%</span>
+                        </div>
+                        <div class="diff-meter-bar">
+                            <div id="diffBarFill" class="diff-bar-fill" style="width: 0%;"></div>
+                        </div>
+                    </div>
+
+                    <div class="diff-meter-item">
+                        <div class="diff-meter-header">
+                            <span>Constant Change Persistence</span>
+                            <span id="constDurText" style="font-family: var(--font-mono); font-weight: 700;">0.0s / 2.5s</span>
+                        </div>
+                        <div class="diff-meter-bar">
+                            <div id="constBarFill" class="diff-bar-fill" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Simple Event Controls (On-Demand Snapshot, Baseline Calibration, Optional Stream) -->
                 <div class="camera-actions-bar">
-                    <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <!-- Grab On-Demand Snapshot -->
+                        <button class="btn-primary" onclick="grabSnapshotNow()" title="Captures a single high-resolution image without continuous streaming">
+                            📸 Capture Snapshot
+                        </button>
+
                         <!-- One-Click Road Calibration -->
-                        <button class="btn-primary" onclick="calibrateRoadBackground()" title="Locks the current road view as the clean baseline">
-                            🎯 Calibrate Road Background
+                        <button class="btn-subtle" onclick="calibrateRoadBackground()" title="Locks the current road view as the clean baseline">
+                            🎯 Calibrate Baseline
                         </button>
 
                         <button class="btn-subtle" onclick="toggleEdgeMask()" id="maskToggleBtn">
                             ⚡ View Edge Mask
+                        </button>
+
+                        <button class="btn-subtle" onclick="toggleLiveStream()" id="streamToggleBtn" title="Optional live stream for inspection">
+                            ▶️ Live Stream
                         </button>
                     </div>
 
@@ -81,7 +113,7 @@
                         <span style="font-size: 0.78rem; color: var(--text-muted);">Source:</span>
                         <select id="cameraSourceSelect" class="clean-select" onchange="changeCameraSource(this.value)">
                             <option value="1">Local Camera 1 (/dev/video1)</option>
-                            <option value="http://10.19.102.50:81/stream">ESP32-CAM (Hotspot Stream)</option>
+                            <option value="http://10.19.102.50:81/capture">ESP32-CAM (/capture on demand)</option>
                             <option value="demo">Simulated Highway Pole CCTV</option>
                         </select>
                     </div>

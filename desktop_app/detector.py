@@ -83,9 +83,16 @@ class RoadObstructionDetector:
         self.bg_calibrated = False     # Whether reference is locked
         self.bg_calibration_time = None
         self.latest_clean_frame = None # Raw captured frame
-        self.latest_fg_mask = None     # Binary threshold difference mask
-        self.latest_fg_vis = None      # Visualized RGB mask for web UI
         self.bg_threshold = 28         # Differential contrast threshold
+
+        # Temporal Frame Differencing & Constant Change Tracking
+        self.prev_gray = None
+        self.latest_diff_pct = 0.0
+        self.latest_constant_duration = 0.0
+        self.latest_constant_triggered = False
+        self.constant_change_threshold_s = getattr(config, 'STATIONARY_SECONDS_THRESHOLD', 2.5)
+        self.diff_blobs = {}           # Persistent difference tracking blobs
+        self.next_blob_id = 1
 
         if ULTRALYTICS_AVAILABLE:
             try:
@@ -133,7 +140,23 @@ class RoadObstructionDetector:
         self.bg_calibration_time = None
         self.latest_fg_mask = None
         self.latest_fg_vis = None
+        self.prev_gray = None
+        self.latest_diff_pct = 0.0
+        self.latest_constant_duration = 0.0
+        self.latest_constant_triggered = False
+        self.diff_blobs.clear()
         return True, "Background reset"
+
+    def get_differencing_telemetry(self):
+        """Returns real-time telemetry on edge frame differencing and constant change state."""
+        return {
+            "diff_pct": round(self.latest_diff_pct, 1),
+            "constant_duration": round(self.latest_constant_duration, 1),
+            "threshold_seconds": self.constant_change_threshold_s,
+            "constant_triggered": self.latest_constant_triggered,
+            "state": "WARN_CONSTANT_OBSTRUCTION" if self.latest_constant_triggered else ("CHANGING" if self.latest_diff_pct > 2.0 else "CLEAR"),
+            "mode": "Frame Differencing & Constant Change Thresholding"
+        }
 
     def get_background_reference(self):
         """Returns the stored clean road background reference or latest frame."""
@@ -207,6 +230,11 @@ class RoadObstructionDetector:
             thresh_roi = cv2.morphologyEx(thresh_roi, cv2.MORPH_OPEN, kernel, iterations=1)
             self.latest_fg_mask = thresh_roi
 
+            # Measure variance / difference percentage in lane corridor
+            roi_pixels = max(1, cv2.countNonZero(roi_mask))
+            diff_pixels = cv2.countNonZero(thresh_roi)
+            self.latest_diff_pct = (diff_pixels / roi_pixels) * 100.0
+
             # Generate visual overlay representation for operator dashboard
             vis = np.zeros((h, w, 3), dtype=np.uint8)
             vis[:, :] = [25, 25, 30] # Dark slate background
@@ -214,11 +242,12 @@ class RoadObstructionDetector:
             cv2.polylines(vis, [self.roi_polygon], isClosed=True, color=(40, 180, 50), thickness=2)
             # Fill obstruction blobs in vivid coral/red
             vis[thresh_roi > 0] = [30, 60, 240]
-            cv2.putText(vis, "EDGE DIFFERENTIAL SUBTRACTION MASK", (20, 30),
+            cv2.putText(vis, f"EDGE DIFF: {self.latest_diff_pct:.1f}% | THRESH: {self.constant_change_threshold_s}s", (20, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
             self.latest_fg_vis = vis
         else:
             thresh_roi = None
+            self.latest_diff_pct = 0.0
 
         detections = []  # [(class_name, conf, [x1, y1, x2, y2])]
 
@@ -388,12 +417,19 @@ class RoadObstructionDetector:
         cv2.rectangle(frame, (10, 8), (w - 10, 38), banner_bg, -1)
         cv2.putText(frame, banner_text, (20, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
+        self.latest_constant_duration = max_duration
+        self.latest_constant_triggered = (highest_status == "DANGER")
+
         alert_info = {
             "status": highest_status,
             "type": hazard_type,
             "dist": hazard_dist,
-            "duration": max_duration,
-            "sound": sound_code
+            "duration": round(max_duration, 1),
+            "sound": sound_code,
+            "diff_pct": round(self.latest_diff_pct, 1),
+            "constant_change": self.latest_constant_triggered,
+            "constant_duration": round(max_duration, 1),
+            "threshold_seconds": self.constant_change_threshold_s
         }
 
         return frame, alert_info

@@ -119,15 +119,27 @@ static esp_err_t capture_handler(httpd_req_t *req) {
 
 // --- Handler: Telemetry & Health Diagnostics (/status) ---
 static esp_err_t status_handler(httpd_req_t *req) {
-  char json_response[256];
+  char json_response[320];
   uint32_t uptime_sec = (millis() - bootTimestamp) / 1000;
   int rssi = WiFi.RSSI();
   uint32_t free_heap = ESP.getFreeHeap();
   uint32_t free_psram = ESP.getFreePsram();
 
   snprintf(json_response, sizeof(json_response),
-    "{\"device\":\"ESP32-CAM-01\",\"status\":\"ONLINE\",\"ip\":\"%s\",\"rssi\":%d,\"uptime_s\":%u,\"frames_served\":%u,\"free_heap\":%u,\"free_psram\":%u}",
+    "{\"device\":\"ESP32-CAM-01\",\"mode\":\"FRAME_DIFFERENCING_EVENT_CAPTURE\",\"status\":\"ONLINE\",\"ip\":\"%s\",\"rssi\":%d,\"uptime_s\":%u,\"frames_served\":%u,\"free_heap\":%u,\"free_psram\":%u}",
     WiFi.localIP().toString().c_str(), rssi, uptime_sec, framesServed, free_heap, free_psram
+  );
+
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+  return httpd_resp_send(req, json_response, strlen(json_response));
+}
+
+// --- Handler: Edge Frame Differencing Telemetry (/diff-status) ---
+static esp_err_t diff_status_handler(httpd_req_t *req) {
+  char json_response[256];
+  snprintf(json_response, sizeof(json_response),
+    "{\"engine\":\"EDGE_FRAME_DIFFERENCING\",\"constant_threshold_s\":2.5,\"motion_threshold_px\":15,\"event_capture_ready\":true,\"active\":true}"
   );
 
   httpd_resp_set_type(req, "application/json");
@@ -196,16 +208,24 @@ void startCameraServer() {
     .user_ctx  = NULL
   };
 
+  httpd_uri_t diff_status_uri = {
+    .uri       = "/diff-status",
+    .method    = HTTP_GET,
+    .handler   = diff_status_handler,
+    .user_ctx  = NULL
+  };
+
   if (httpd_start(&stream_httpd, &config) == ESP_OK) {
     httpd_register_uri_handler(stream_httpd, &stream_uri);
     httpd_register_uri_handler(stream_httpd, &capture_uri);
     httpd_register_uri_handler(stream_httpd, &status_uri);
+    httpd_register_uri_handler(stream_httpd, &diff_status_uri);
     httpd_register_uri_handler(stream_httpd, &led_uri);
 
     Serial.printf("[ESP32-CAM] Web server active on port %d\n", HTTP_SERVER_PORT);
-    Serial.printf("   Stream:  http://%s:%d/stream\n", WiFi.localIP().toString().c_str(), HTTP_SERVER_PORT);
-    Serial.printf("   Capture: http://%s:%d/capture\n", WiFi.localIP().toString().c_str(), HTTP_SERVER_PORT);
-    Serial.printf("   Status:  http://%s:%d/status\n", WiFi.localIP().toString().c_str(), HTTP_SERVER_PORT);
+    Serial.printf("   Capture (Event Snapshot): http://%s:%d/capture\n", WiFi.localIP().toString().c_str(), HTTP_SERVER_PORT);
+    Serial.printf("   Differencing Telemetry:  http://%s:%d/diff-status\n", WiFi.localIP().toString().c_str(), HTTP_SERVER_PORT);
+    Serial.printf("   Stream (Optional Debug): http://%s:%d/stream\n", WiFi.localIP().toString().c_str(), HTTP_SERVER_PORT);
   }
 }
 
