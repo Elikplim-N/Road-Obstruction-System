@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Highway Traffic & Obstruction Management Center</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- Chart.js CDN for Analytics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+    <!-- ================= TOP COMMAND HEADER ================= -->
+    <header class="command-header">
+        <div class="brand">
+            <div class="brand-icon">🛣️</div>
+            <div>
+                <div class="brand-title">HIGHWAY INTELLIGENT TRANSPORTATION SYSTEM (ITS)</div>
+                <div class="brand-sub">Corridor N-12 Autonomous Obstruction Surveillance & LoRa Dispatch Platform</div>
+            </div>
+        </div>
+
+        <div class="header-status-group">
+            <div class="gateway-badge" id="badgeWifi">
+                <span class="dot dot-green"></span> Wi-Fi Hotspot: Active
+            </div>
+            <div class="gateway-badge" id="badgeLora">
+                <span class="dot dot-amber"></span> LoRa Link: Standby
+            </div>
+            <div class="gateway-badge">
+                🕒 <span id="utcClock">--:--:-- UTC</span>
+            </div>
+            <button id="audioBtn" onclick="toggleAudioMute()" style="padding: 6px 12px; font-size: 0.8rem;">
+                🔊 Audio Enabled
+            </button>
+            <div id="globalStatusPill" class="system-status-pill pill-clear">
+                🟢 CORRIDOR CLEAR
+            </div>
+        </div>
+    </header>
+
+    <!-- ================= METRICS & KPI RIBBON ================= -->
+    <section class="metrics-ribbon">
+        <div class="metric-card">
+            <div class="metric-title">Mean Time to Detect (MTTD)</div>
+            <div class="metric-number" id="kpiMttd">2.5s</div>
+            <div class="metric-foot">Autonomous AI Verification</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-title">Wireless Delivery (PDR)</div>
+            <div class="metric-number" id="kpiPdr">100.0%</div>
+            <div class="metric-foot">Zero Packet Drop Rate</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-title">Active Pole Nodes</div>
+            <div class="metric-number" id="kpiPoles">3 Online</div>
+            <div class="metric-foot">Solar / 18650 Battery Array</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-title">Hazards Flagged Today</div>
+            <div class="metric-number" id="kpiToday">0</div>
+            <div class="metric-foot">SQLite Incident Ledger</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-title">Total Historical Events</div>
+            <div class="metric-number" id="kpiTotal">0</div>
+            <div class="metric-foot">Archived Evidence Snapshots</div>
+        </div>
+    </section>
+
+    <!-- ================= MAIN SURVEILLANCE & TRIAGE WORKSPACE ================= -->
+    <main class="workspace-grid">
+        
+        <!-- Left: CCTV Video Surveillance & AI Analysis -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    📹 Live Video Surveillance (Active Sensing Pole #04)
+                </div>
+                <div style="font-size: 0.8rem; color: #94a3b8;">
+                    Resolution: <strong>800x600</strong> | AI Model: <strong>YOLOv8 + Lane ROI</strong>
+                </div>
+            </div>
+
+            <!-- Video Feed Canvas -->
+            <div class="video-stage">
+                <img id="mainVideoFeed" class="video-stream-img" src="/video_feed" alt="Live Highway Video Stream">
+                <div class="video-hud-overlay">
+                    <div class="hud-tag">POLE #04 [CORRIDOR N-12 | 6.0m ELEVATION]</div>
+                    <div class="hud-tag">LANE 1 & 2 ACTIVE</div>
+                </div>
+            </div>
+
+            <!-- Stream Switcher & Controls -->
+            <div class="video-ctrl-bar">
+                <label style="font-size: 0.8rem; color: var(--text-dim);">Camera Input:</label>
+                <select id="cameraSelect" onchange="changeCameraSource()">
+                    <option value="POLE_DEMO">Street Pole #04 (Elevated 45° - Stalled Car Demo)</option>
+                    <option value="DASHCAM">Forward Vehicle Dashcam View</option>
+                    <option value="LIVE_CAM">USB / Local Camera (Index 1)</option>
+                    <option value="ESP32_URL">Wireless ESP32-CAM via Hotspot URL</option>
+                </select>
+
+                <button class="btn-primary" onclick="alert('📐 Click anywhere on the desktop GUI or set custom coordinates in config.py to adjust lane corridor.')">
+                    📐 Calibrate Lane ROI
+                </button>
+                <button onclick="window.open('/video_feed', '_blank')">
+                    ⛶ Fullscreen Stream
+                </button>
+            </div>
+        </div>
+
+        <!-- Right: Incident Response & Actuation Hub -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    ⚡ Incident Triage & Driver Alert Actuators
+                </div>
+                <div style="font-size: 0.8rem; color: #94a3b8;">
+                    Subsystems: <strong>LoRa + Wi-Fi + VMS</strong>
+                </div>
+            </div>
+
+            <!-- Prominent Triage Alert Banner -->
+            <div id="triageBanner" class="triage-alert-banner">
+                <div id="triageTitle" class="triage-title">Operational State: Normal Patrol</div>
+                <div id="triageMeta" class="triage-meta">No active obstructions detected. Autonomous monitoring in progress.</div>
+            </div>
+
+            <!-- Operator Action Buttons -->
+            <div class="action-row">
+                <button class="btn-danger" onclick="broadcastLoraEmergency()">
+                    📡 Broadcast LoRa Alert
+                </button>
+                <button class="btn-primary" onclick="dispatchPatrol()">
+                    🚓 Dispatch Patrol Unit
+                </button>
+            </div>
+            <div class="action-row" style="margin-top: 8px;">
+                <button class="btn-success" onclick="acknowledgeIncident()">
+                    ✅ Acknowledge Incident
+                </button>
+                <button onclick="openEvidenceModal(new Date().toLocaleTimeString(), 'STALLED CAR')">
+                    📸 Inspect Photo Evidence
+                </button>
+            </div>
+
+            <!-- Upstream Variable Message Sign (VMS) Preview -->
+            <div class="vms-container">
+                <div class="vms-title-tag">Roadside Variable Message Sign (500m Upstream)</div>
+                <div id="vmsText" class="vms-matrix-display">ROAD CLEAR - MAINTAIN SAFE DISTANCE</div>
+            </div>
+
+            <!-- In-Cabin Driver Receiver Hardware Twin -->
+            <div class="twin-container">
+                <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: #94a3b8; margin-bottom: 6px;">
+                    <span>IN-CABIN DRIVER ALERT RECEIVER (ESP32)</span>
+                    <span id="twinBuzzer" style="color: #64748b; font-weight: bold;">🔊 [MUTE]</span>
+                </div>
+                <div id="twinLcd" class="twin-lcd">
+                    ROAD STATUS: OK<br>LANE: CLEAR
+                </div>
+                <div class="twin-leds">
+                    <span id="twinLedGreen" style="color: #10b981;">● ALL CLEAR (GREEN)</span>
+                    <span id="twinLedRed" style="color: #334155;">● DANGER (RED)</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ================= BOTTOM DECK: HISTORICAL LEDGER & ANALYTICS ================= -->
+    <section class="card">
+        <nav class="tabs-nav">
+            <button id="tabBtn_incidents" class="tab-btn active" onclick="switchTab('incidents')">
+                💾 Incident Ledger & Snapshots (Obj 6)
+            </button>
+            <button id="tabBtn_nodes" class="tab-btn" onclick="switchTab('nodes')">
+                🔋 Street Pole Network & Solar Power (Obj 5)
+            </button>
+            <button id="tabBtn_analytics" class="tab-btn" onclick="switchTab('analytics')">
+                📊 Safety Analytics & Trends (Obj 7)
+            </button>
+        </nav>
+
+        <!-- TAB 1: INCIDENT LEDGER -->
+        <div id="tabContent_incidents" class="tab-content active">
+            <div style="max-height: 280px; overflow-y: auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Node ID</th>
+                            <th>Status</th>
+                            <th>Hazard Type</th>
+                            <th>Lane Corridor</th>
+                            <th>Duration</th>
+                            <th>Evidence Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="incidentsTbody">
+                        <tr><td colspan="7" style="text-align: center; color: #64748b;">Loading incident database...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TAB 2: POLE NODES & POWER GRID -->
+        <div id="tabContent_nodes" class="tab-content">
+            <div id="nodesGrid" class="nodes-grid">
+                <!-- Dynamically rendered pole nodes -->
+            </div>
+        </div>
+
+        <!-- TAB 3: ANALYTICS & CHARTS -->
+        <div id="tabContent_analytics" class="tab-content">
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px; height: 260px;">
+                <div style="position: relative; height: 100%;">
+                    <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 6px;">Hourly Incident Frequency (24-Hour Distribution)</div>
+                    <canvas id="hourlyChart"></canvas>
+                </div>
+                <div style="position: relative; height: 100%;">
+                    <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 6px;">Obstruction Type Breakdown</div>
+                    <canvas id="typeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Evidence Snapshot Modal -->
+    <div id="evidenceModal" class="modal">
+        <div class="modal-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="color: #93c5fd; font-size: 1.1rem;">📸 Photographic Incident Evidence</h3>
+                <button onclick="closeEvidenceModal()" style="padding: 4px 10px;">✕ Close</button>
+            </div>
+            <div style="background: #000; border-radius: 6px; overflow: hidden; text-align: center; max-height: 500px;">
+                <img id="modalImage" src="" alt="Incident Snapshot" style="max-width: 100%; max-height: 480px; object-fit: contain;">
+            </div>
+            <div id="modalCaption" style="font-size: 0.85rem; color: #94a3b8; margin-top: 10px; font-family: var(--font-mono);">
+                Incident Snapshot Details
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Controller -->
+    <script src="/js/charts.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

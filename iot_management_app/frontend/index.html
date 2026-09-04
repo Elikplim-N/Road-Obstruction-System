@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Highway Road Safety System</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <!-- ================= SIMPLE TOPBAR ================= -->
+    <nav class="navbar">
+        <div class="brand-section">
+            <div class="brand-logo">🛡️</div>
+            <div>
+                <span class="brand-name">Highway Road Safety System</span>
+                <span class="brand-badge">Obstruction Monitor</span>
+            </div>
+        </div>
+
+        <div class="nav-actions">
+            <!-- Road Status Pill -->
+            <div id="systemStatusPill" class="status-pill status-pill-clear">
+                <span class="pulse-dot-green"></span>
+                <span id="systemStatusText">LANE CLEAR</span>
+            </div>
+
+            <!-- Dokploy DB Button -->
+            <button id="dbStatusBtn" class="btn-subtle" onclick="openDbModal()">
+                🐘 <span id="dbStatusLabel">Database: SQLite</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ================= MAIN UNIFIED DASHBOARD ================= -->
+    <main class="main-content">
+
+        <!-- Top Grid: Live Camera + Road Status & Devices -->
+        <div class="dashboard-grid">
+
+            <!-- LEFT: Live Camera Stream & Simple Background Calibration -->
+            <div class="card camera-card">
+                <div class="card-header">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="pulse-dot-green"></span>
+                        <h2 class="card-title">Live Highway Camera (Street Pole #01)</h2>
+                    </div>
+                    <span id="calibBadge" class="calib-badge">● Background Calibrated</span>
+                </div>
+
+                <!-- Video Viewport -->
+                <div class="video-frame-container">
+                    <img id="liveVideoFeed" src="/api/camera/stream?view=live" alt="Highway Camera Feed">
+                    
+                    <!-- Subtle Alert Banner overlay on video -->
+                    <div id="videoOverlayBanner" class="video-overlay-banner banner-clear">
+                        ● ROADWAY CLEAR
+                    </div>
+                </div>
+
+                <!-- Simple Camera Controls (Just 2 clean actions) -->
+                <div class="camera-actions-bar">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <!-- One-Click Road Calibration -->
+                        <button class="btn-primary" onclick="calibrateRoadBackground()" title="Locks the current road view as the clean baseline">
+                            🎯 Calibrate Road Background
+                        </button>
+
+                        <button class="btn-subtle" onclick="toggleEdgeMask()" id="maskToggleBtn">
+                            ⚡ View Edge Mask
+                        </button>
+                    </div>
+
+                    <!-- Simple Camera Source Dropdown -->
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 0.78rem; color: var(--text-muted);">Source:</span>
+                        <select id="cameraSourceSelect" class="clean-select" onchange="changeCameraSource(this.value)">
+                            <option value="1">Local Camera 1 (/dev/video1)</option>
+                            <option value="http://10.19.102.50:81/stream">ESP32-CAM (Hotspot Stream)</option>
+                            <option value="demo">Simulated Highway Pole CCTV</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Alert Status & Connected Hardware -->
+            <div class="side-col">
+                
+                <!-- Alert Overview Card -->
+                <div class="card alert-summary-card" id="hazardCard">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span class="sec-label">Highway Status</span>
+                        <span class="sec-tag">Corridor N-12 | Lane 1</span>
+                    </div>
+                    <div class="hazard-state-title" id="hazardTitle">ALL LANES CLEAR</div>
+                    <p class="hazard-state-desc" id="hazardDesc">No obstructions detected. Monitoring vehicle corridor at 25 FPS.</p>
+                    
+                    <div class="dispatch-pill">
+                        ⚡ Warning Dispatch: <strong>LoRa 433MHz + Wi-Fi UDP (< 1ms)</strong>
+                    </div>
+                </div>
+
+                <!-- Connected Hardware Cards (Simple & Clear) -->
+                <div class="card devices-summary-card">
+                    <div class="card-header" style="margin-bottom: 12px; padding: 0;">
+                        <h3 class="card-title" style="font-size: 0.92rem;">Connected Devices</h3>
+                        <span style="font-size: 0.75rem; color: #10b981; font-weight: 600;">● 3 Online</span>
+                    </div>
+
+                    <div class="device-row">
+                        <div class="dev-icon">📹</div>
+                        <div class="dev-info">
+                            <div class="dev-name">Street Pole Camera Node</div>
+                            <div class="dev-sub">ESP32-CAM • Optical Sensing Unit</div>
+                        </div>
+                        <span class="status-dot online">Online</span>
+                    </div>
+
+                    <div class="device-row">
+                        <div class="dev-icon">🚗</div>
+                        <div class="dev-info">
+                            <div class="dev-name">Driver Alert Unit</div>
+                            <div class="dev-sub">In-Cabin 16x2 LCD & Piezo Buzzer</div>
+                        </div>
+                        <button class="btn-test" onclick="testDriverAlarm()">🔊 Test Alarm</button>
+                    </div>
+
+                    <div class="device-row">
+                        <div class="dev-icon">📡</div>
+                        <div class="dev-info">
+                            <div class="dev-name">Roadside LoRa Gateway</div>
+                            <div class="dev-sub">433.0 MHz Transceiver • 100% PDR</div>
+                        </div>
+                        <span class="status-dot online">Online</span>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Bottom Section: Photographic Incident Evidence (Clean Table) -->
+        <div class="card" style="margin-top: 20px;">
+            <div class="card-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 14px;">
+                <div>
+                    <h2 class="card-title">📸 Incident Log & Photographic Evidence</h2>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                        High-speed snapshots automatically saved when stationary road obstructions are detected.
+                    </p>
+                </div>
+                <button class="btn-subtle" onclick="fetchLogs()">🔄 Refresh Records</button>
+            </div>
+
+            <div class="table-wrapper">
+                <table class="clean-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Device</th>
+                            <th>Event Description</th>
+                            <th>Severity</th>
+                            <th>Duration</th>
+                            <th>Photo Evidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTbody">
+                        <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">Loading incident evidence...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ================= DOKPLOY POSTGRESQL MODAL ================= -->
+    <div id="dbModal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 520px;">
+            <div class="modal-header">
+                <span class="modal-title">🐘 Dokploy PostgreSQL Database</span>
+                <button class="btn-close" onclick="closeDbModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 14px;">
+                    Enter your Dokploy PostgreSQL connection URI to store road obstruction logs and captured photos directly in PostgreSQL.
+                </p>
+                <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 6px;">
+                    Connection URI
+                </label>
+                <input type="text" id="dbUriInput" class="clean-input" placeholder="postgresql://postgres:password@your-dokploy-host:5432/road_db">
+                <span id="dbModalStatus" style="font-size: 0.78rem; margin-top: 6px; display: block;"></span>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-subtle" onclick="closeDbModal()">Cancel</button>
+                <button class="btn-primary" onclick="connectDokployDatabase()">Connect & Sync</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= PHOTO LIGHTBOX MODAL ================= -->
+    <div id="photoModal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 780px;">
+            <div class="modal-header">
+                <span class="modal-title">📸 Incident Photographic Evidence</span>
+                <button class="btn-close" onclick="closePhotoModal()">✕</button>
+            </div>
+            <div class="modal-body" style="text-align: center; background: #0f172a; padding: 16px;">
+                <img id="photoModalImg" src="" alt="Evidence Photo" style="max-width: 100%; max-height: 480px; object-fit: contain; border-radius: 6px;">
+            </div>
+            <div style="padding: 12px 20px; font-size: 0.82rem; color: var(--text-secondary); font-family: var(--font-mono);" id="photoModalCaption">
+                Evidence Record
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script src="/js/app.js"></script>
+</body>
+</html>

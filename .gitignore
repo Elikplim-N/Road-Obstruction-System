@@ -1,0 +1,20 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Environment secrets & credentials
+.env
+*.env.local
+
+# Logs and local databases
+*.log
+server.log
+desktop_app/sample_data/road_incidents.db
+desktop_app/sample_data/snapshots/
