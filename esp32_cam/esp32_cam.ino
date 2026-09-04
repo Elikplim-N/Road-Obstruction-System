@@ -234,7 +234,11 @@ void startCameraServer() {
 // ==============================================================================
 void setup() {
   // Disable brownout detector to prevent current spike reboot loops on USB/battery
+#if defined(RTC_CNTL_BROWN_OUT_REG)
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+#elif defined(RTC_CNTL_BROWNOUT_REG)
   WRITE_PERI_REG(RTC_CNTL_BROWNOUT_REG, 0);
+#endif
 
   Serial.begin(115200);
   delay(500);
@@ -287,13 +291,19 @@ void setup() {
   // Initialize Camera
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
-    Serial.printf("[ESP32-CAM FATAL] Camera init failed with error 0x%x\n", err);
-    while (true) {
-      digitalWrite(STATUS_LED_PIN, LOW);
-      delay(100);
-      digitalWrite(STATUS_LED_PIN, HIGH);
-      delay(100);
-    }
+    Serial.printf("[ESP32-CAM] First probe failed (0x%x). Retrying with 10MHz XCLK...\n", err);
+    esp_camera_deinit();
+    delay(100);
+    config.xclk_freq_hz = 10000000;
+    config.frame_size = FRAMESIZE_VGA;
+    config.jpeg_quality = 12;
+    err = esp_camera_init(&config);
+  }
+
+  if (err != ESP_OK) {
+    Serial.printf("[ESP32-CAM WARNING] Camera sensor init failed (0x%x). Please check OV2640 ribbon connector seating.\n", err);
+  } else {
+    Serial.println("[ESP32-CAM] Camera initialized successfully!");
   }
 
   // Optimize Sensor for Outdoor Highway Lighting
